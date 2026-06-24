@@ -1,8 +1,10 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { verifySession, requireRole } = require("./authMiddleware");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 app.use(
   cors({
@@ -11,7 +13,6 @@ app.use(
   }),
 );
 app.use(express.json());
-require("dotenv").config();
 
 const port = process.env.PORT || 5000;
 const uri = process.env.MONGODB_URI;
@@ -166,46 +167,137 @@ async function run() {
       res.send(result);
     });
 
-    // PUT /api/proposals/:id (Client accept/reject)
+    // PUT /api/proposals/:id (Client reject)
     app.put("/api/proposals/:id", verifySession, async (req, res) => {
       const { id } = req.params;
-      const { status } = req.body; // 'accepted' or 'rejected'
+      const { status } = req.body; // 'rejected'
 
       const result = await proposalsCollection.updateOne(
         { _id: new ObjectId(id) },
         { $set: { status } },
       );
+      res.send(result);
+    });
 
-      if (status === "accepted") {
-        const proposal = await proposalsCollection.findOne({
-          _id: new ObjectId(id),
-        });
-        if (proposal) {
+    // --- CHECKOUT & PAYMENTS API ---
+    const paymentsCollection = db.collection("payments");
+
+    // POST /api/checkout/create-intent
+    // This endpoint creates a Stripe PaymentIntent. It's called by the client before showing the checkout form.
+    // We pass the proposalId to fetch the agreed amount, so the client cannot spoof the price.
+    app.post(
+      "/api/checkout/create-intent",
+      verifySession,
+      requireRole("client"),
+      async (req, res) => {
+        try {
+          console.log("HIT /api/checkout/create-intent", req.body);
+          const { proposalId } = req.body;
+
+          // 1. Fetch the proposal to get the exact budget
+          const proposal = await proposalsCollection.findOne({
+            _id: new ObjectId(proposalId),
+          });
+          if (!proposal) {
+            console.log("Proposal not found for ID:", proposalId);
+            return res.status(404).send({ error: "Proposal not found" });
+          }
+
+          // 2. Convert budget to cents (Stripe expects the amount in the smallest currency unit)
+          const amount = Math.round(proposal.proposed_budget * 100);
+
+          // 3. Create the PaymentIntent on Stripe
+          const paymentIntent = await stripe.paymentIntents.create({
+            amount: amount,
+            currency: "usd",
+            // Store metadata to easily identify the payment later
+            metadata: {
+              proposalId: proposalId,
+              taskId: proposal.task_id,
+              clientId: req.user.id || req.user.email,
+              freelancerEmail: proposal.freelancer_email,
+            },
+          });
+
+          // 4. Send the client secret back so the frontend can render the secure Stripe Elements form
+          res.send({ clientSecret: paymentIntent.client_secret, proposal });
+        } catch (error) {
+          console.error("Stripe Intent Error:", error);
+          res.status(500).send({ error: error.message });
+        }
+      },
+    );
+
+    // POST /api/proposals/:id/confirm-payment
+    // This endpoint is called by the frontend after Stripe successfully processes the payment.
+    // It acts as the webhook/callback to verify the payment and update the database records.
+    app.post(
+      "/api/proposals/:id/confirm-payment",
+      verifySession,
+      requireRole("client"),
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const { paymentIntentId } = req.body;
+
+          // 1. Verify the payment status directly with Stripe to prevent fraud
+          const paymentIntent =
+            await stripe.paymentIntents.retrieve(paymentIntentId);
+          if (paymentIntent.status !== "succeeded") {
+            return res.status(400).send({ error: "Payment not successful" });
+          }
+
+          // 2. Retrieve the proposal details
+          const proposal = await proposalsCollection.findOne({
+            _id: new ObjectId(id),
+          });
+          if (!proposal)
+            return res.status(404).send({ error: "Proposal not found" });
+
+          // 3. Check if we already processed this payment (Idempotency)
+          const existingPayment = await paymentsCollection.findOne({
+            transaction_id: paymentIntentId,
+          });
+          if (existingPayment) {
+            return res.send({ success: true, message: "Already processed" });
+          }
+
+          // 4. Update the proposal status to 'accepted'
+          await proposalsCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status: "accepted" } },
+          );
+
+          // Update task status
           await tasksCollection.updateOne(
             { _id: new ObjectId(proposal.task_id) },
             { $set: { status: "In Progress" } },
           );
+
+          // Reject all other proposals for this task
           await proposalsCollection.updateMany(
             { task_id: proposal.task_id, _id: { $ne: new ObjectId(id) } },
             { $set: { status: "rejected" } },
           );
 
-          // Mock payment generation for Admin Dashboard
-          const paymentsCollection = db.collection("payments");
+          // Record the payment
           await paymentsCollection.insertOne({
             client_email: req.user.email,
             freelancer_email: proposal.freelancer_email,
             task_id: proposal.task_id,
             amount: proposal.proposed_budget,
-            transaction_id:
-              "mock_txn_" + Math.random().toString(36).substr(2, 9),
+            transaction_id: paymentIntentId,
             payment_status: "succeeded",
             paid_at: new Date(),
           });
+
+          res.send({ success: true });
+        } catch (error) {
+          console.error("Confirm Payment Error:", error);
+          res.status(500).send({ error: error.message });
         }
-      }
-      res.send(result);
-    });
+      },
+    );
 
     // --- USERS API ---
 
@@ -250,7 +342,6 @@ async function run() {
     );
 
     // --- PAYMENTS API ---
-    const paymentsCollection = db.collection("payments");
 
     // GET /api/payments
     app.get("/api/payments", verifySession, async (req, res) => {
