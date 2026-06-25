@@ -380,7 +380,7 @@ async function run() {
       if (revieweeEmail) query.reviewee_email = revieweeEmail;
 
       const result = await reviewsCollection.find(query).toArray();
-      res.send(result);
+      // res.send(result);
     });
 
     // --- ADMIN API ---
