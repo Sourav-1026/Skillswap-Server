@@ -1,8 +1,6 @@
 const { MongoClient, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 
-// This middleware reads the better-auth cookie from the request
-// and verifies the session using the frontend's Better Auth API.
 const verifySession = async (req, res, next) => {
   try {
     const cookieHeader = req.headers.cookie;
@@ -27,11 +25,9 @@ const verifySession = async (req, res, next) => {
     const sessionData = await response.json();
 
     if (!sessionData || !sessionData.user) {
-      return res
-        .status(401)
-        .json({
-          error: "Unauthorized: Could not determine user ID from session",
-        });
+      return res.status(401).json({
+        error: "Unauthorized: Could not determine user ID from session",
+      });
     }
 
     const userId = sessionData.user.id;
@@ -48,7 +44,7 @@ const verifySession = async (req, res, next) => {
     try {
       objectId = typeof userId === "string" ? new ObjectId(userId) : userId;
     } catch (e) {
-      objectId = userId; // fallback
+      objectId = userId;
     }
 
     // Fetch user details from our DB to get fresh role/status

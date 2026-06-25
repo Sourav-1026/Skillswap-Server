@@ -34,7 +34,7 @@ async function run() {
 
     const tasksCollection = db.collection("tasks");
     const proposalsCollection = db.collection("proposals");
-    const usersCollection = db.collection("user"); // Better Auth uses 'user' collection
+    const usersCollection = db.collection("user");
 
     // --- TASKS API ---
 
@@ -183,8 +183,6 @@ async function run() {
     const paymentsCollection = db.collection("payments");
 
     // POST /api/checkout/create-intent
-    // This endpoint creates a Stripe PaymentIntent. It's called by the client before showing the checkout form.
-    // We pass the proposalId to fetch the agreed amount, so the client cannot spoof the price.
     app.post(
       "/api/checkout/create-intent",
       verifySession,
@@ -229,8 +227,6 @@ async function run() {
     );
 
     // POST /api/proposals/:id/confirm-payment
-    // This endpoint is called by the frontend after Stripe successfully processes the payment.
-    // It acts as the webhook/callback to verify the payment and update the database records.
     app.post(
       "/api/proposals/:id/confirm-payment",
       verifySession,
