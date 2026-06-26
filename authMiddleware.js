@@ -11,7 +11,9 @@ const verifySession = async (req, res, next) => {
     if (authHeader && authHeader.startsWith("Bearer ")) {
       // ✅ JWT token from Authorization header (production)
       const token = authHeader.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.BETTER_AUTH_SECRET);
+      const decoded = jwt.verify(token, process.env.BETTER_AUTH_SECRET, {
+        algorithms: ["HS256", "RS256", "ES256"],
+      });
       userId = decoded.sub || decoded.id;
     } else if (cookieHeader) {
       // ✅ Fallback: cookie-based session (localhost)
