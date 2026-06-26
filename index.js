@@ -16,7 +16,7 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
-app.options("*", cors()); // ✅ handle preflight for all routes
+app.options("/{*path}", cors());
 app.use(express.json());
 
 const uri = process.env.MONGODB_URI;
