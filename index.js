@@ -26,28 +26,28 @@ const client = new MongoClient(uri, {
 
 // ✅ Connection handler
 let db;
-async function connectDB() {
-  if (!db || !client.topology || !client.topology.isConnected()) {
-    // Force a fresh client if topology is dead
-    await client.close().catch(() => {});
-    await client.connect();
-    db = client.db("skillswap_db");
-    app.locals.db = db;
-    console.log("Connected to MongoDB");
-  }
-  return db;
-}
+// async function connectDB() {
+//   if (!db || !client.topology || !client.topology.isConnected()) {
+//     // Force a fresh client if topology is dead
+//     await client.close().catch(() => {});
+//     await client.connect();
+//     db = client.db("skillswap_db");
+//     app.locals.db = db;
+//     console.log("Connected to MongoDB");
+//   }
+//   return db;
+// }
 
-// ✅ Reconnects on every request if needed
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    console.error("MongoDB connection error:", err);
-    res.status(500).json({ error: "Database connection failed" });
-  }
-});
+// // ✅ Reconnects on every request if needed
+// app.use(async (req, res, next) => {
+//   try {
+//     await connectDB();
+//     next();
+//   } catch (err) {
+//     console.error("MongoDB connection error:", err);
+//     res.status(500).json({ error: "Database connection failed" });
+//   }
+// });
 
 // ✅ Helper — always gets fresh collection references
 const cols = () => ({
@@ -397,12 +397,33 @@ app.get("/", (req, res) => res.send("Skillswap Server Running"));
 
 // ✅ Only listen locally
 // if (process.env.NODE_ENV !== "production") {
-const port = process.env.PORT || 5000;
-app.listen(port, () => console.log(`Server running on port ${port}`));
-// }
+// const port = process.env.PORT || 5000;
+// app.listen(port, () => console.log(`Server running on port ${port}`));
+// // }
 
-process.on("unhandledRejection", (err) => {
-  console.error("Unhandled error:", err);
-});
+// process.on("unhandledRejection", (err) => {
+//   console.error("Unhandled error:", err);
+// });
 // ✅ Required for Vercel
 // module.exports = app;
+
+async function startServer() {
+  try {
+    // Connect to MongoDB FIRST
+    await client.connect();
+    db = client.db("skillswap_db");
+    app.locals.db = db;
+    console.log("Connected to MongoDB");
+
+    // THEN start the server
+    const port = process.env.PORT || 5000;
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
+  } catch (err) {
+    console.error("Startup failed:", err);
+    process.exit(1);
+  }
+}
+
+startServer();
