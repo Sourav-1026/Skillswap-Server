@@ -15,6 +15,8 @@ const verifySession = async (req, res, next) => {
     const response = await fetch(authUrl, {
       headers: {
         cookie: cookieHeader,
+        origin: process.env.CLIENT_URL || "http://localhost:3000", // ✅ add this
+        "Content-Type": "application/json",
       },
     });
 
