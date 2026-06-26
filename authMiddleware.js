@@ -1,38 +1,44 @@
-const { MongoClient, ObjectId } = require("mongodb");
+const { ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 
 const verifySession = async (req, res, next) => {
   try {
+    const authHeader = req.headers.authorization;
     const cookieHeader = req.headers.cookie;
-    if (!cookieHeader) {
-      return res.status(401).json({ error: "Unauthorized: No cookies found" });
-    }
 
-    // Call the Better Auth get-session API to validate the token properly
-    const authUrl = process.env.CLIENT_URL
-      ? `${process.env.CLIENT_URL}/api/auth/get-session`
-      : "http://localhost:3000/api/auth/get-session";
-    const response = await fetch(authUrl, {
-      headers: {
-        cookie: cookieHeader,
-        origin: process.env.CLIENT_URL || "http://localhost:3000", // ✅ add this
-        "Content-Type": "application/json",
-      },
-    });
+    let userId;
 
-    if (!response.ok) {
-      return res.status(401).json({ error: "Unauthorized: Invalid session" });
-    }
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      // ✅ JWT token from Authorization header (production)
+      const token = authHeader.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.BETTER_AUTH_SECRET);
+      userId = decoded.sub || decoded.id;
+    } else if (cookieHeader) {
+      // ✅ Fallback: cookie-based session (localhost)
+      const authUrl = process.env.CLIENT_URL
+        ? `${process.env.CLIENT_URL}/api/auth/get-session`
+        : "http://localhost:3000/api/auth/get-session";
 
-    const sessionData = await response.json();
-
-    if (!sessionData || !sessionData.user) {
-      return res.status(401).json({
-        error: "Unauthorized: Could not determine user ID from session",
+      const response = await fetch(authUrl, {
+        headers: {
+          cookie: cookieHeader,
+          origin: process.env.CLIENT_URL || "http://localhost:3000",
+          "Content-Type": "application/json",
+        },
       });
-    }
 
-    const userId = sessionData.user.id;
+      if (!response.ok) {
+        return res.status(401).json({ error: "Unauthorized: Invalid session" });
+      }
+
+      const sessionData = await response.json();
+      if (!sessionData?.user) {
+        return res.status(401).json({ error: "Unauthorized: No session" });
+      }
+      userId = sessionData.user.id;
+    } else {
+      return res.status(401).json({ error: "Unauthorized: No credentials" });
+    }
 
     const db = req.app.locals.db;
     if (!db) {
@@ -41,7 +47,6 @@ const verifySession = async (req, res, next) => {
         .json({ error: "Internal Server Error: DB not connected" });
     }
 
-    // Ensure userId is an ObjectId if it's a string from JWT
     let objectId;
     try {
       objectId = typeof userId === "string" ? new ObjectId(userId) : userId;
@@ -49,7 +54,6 @@ const verifySession = async (req, res, next) => {
       objectId = userId;
     }
 
-    // Fetch user details from our DB to get fresh role/status
     const user = await db.collection("user").findOne({ _id: objectId });
     if (!user) {
       return res.status(401).json({ error: "Unauthorized: User not found" });
@@ -61,7 +65,6 @@ const verifySession = async (req, res, next) => {
         .json({ error: "Forbidden: Your account has been blocked" });
     }
 
-    // Attach user to request
     req.user = user;
     next();
   } catch (error) {
@@ -75,7 +78,6 @@ const requireRole = (role) => {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-
     if (req.user.role?.toLowerCase() !== role.toLowerCase()) {
       return res
         .status(403)
