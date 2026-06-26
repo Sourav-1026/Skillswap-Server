@@ -5,13 +5,18 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { verifySession, requireRole } = require("./authMiddleware");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const jwt = require("jsonwebtoken");
 
+// ✅ Add allowedHeaders
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
     credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"], // ✅ this is what's missing
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
+app.options("*", cors()); // ✅ handle preflight for all routes
 app.use(express.json());
 
 const uri = process.env.MONGODB_URI;
