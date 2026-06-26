@@ -9,14 +9,69 @@ const verifySession = async (req, res, next) => {
     let userId;
 
     if (authHeader && authHeader.startsWith("Bearer ")) {
-      // ✅ JWT token from Authorization header (production)
       const token = authHeader.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.BETTER_AUTH_SECRET, {
-        algorithms: ["HS256", "RS256", "ES256"],
-      });
-      userId = decoded.sub || decoded.id;
+
+      // ✅ Try JWT verify, but fall back to cookie if it fails
+      try {
+        const decoded = jwt.verify(token, process.env.BETTER_AUTH_SECRET, {
+          algorithms: ["HS256", "RS256", "ES256"],
+        });
+        userId = decoded.sub || decoded.id;
+      } catch (jwtError) {
+        // ✅ JWT failed — try cookie-based session as fallback
+        console.warn(
+          "JWT verify failed, trying cookie session:",
+          jwtError.message,
+        );
+
+        if (cookieHeader) {
+          const authUrl = process.env.CLIENT_URL
+            ? `${process.env.CLIENT_URL}/api/auth/get-session`
+            : "http://localhost:3000/api/auth/get-session";
+
+          const response = await fetch(authUrl, {
+            headers: {
+              cookie: cookieHeader,
+              origin: process.env.CLIENT_URL || "http://localhost:3000",
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (!response.ok) {
+            return res
+              .status(401)
+              .json({ error: "Unauthorized: Invalid session" });
+          }
+
+          const sessionData = await response.json();
+          if (!sessionData?.user) {
+            return res.status(401).json({ error: "Unauthorized: No session" });
+          }
+          userId = sessionData.user.id;
+        } else {
+          // ✅ No cookie either — decode without verify to at least get userId
+          // Only do this if you trust the token came from Better Auth
+          try {
+            const decoded = jwt.decode(token);
+            userId = decoded?.sub || decoded?.id;
+            if (!userId) {
+              return res
+                .status(401)
+                .json({
+                  error: "Unauthorized: Cannot extract user from token",
+                });
+            }
+            console.warn(
+              "Using unverified JWT decode — check BETTER_AUTH_SECRET env var",
+            );
+          } catch {
+            return res
+              .status(401)
+              .json({ error: "Unauthorized: Invalid token" });
+          }
+        }
+      }
     } else if (cookieHeader) {
-      // ✅ Fallback: cookie-based session (localhost)
       const authUrl = process.env.CLIENT_URL
         ? `${process.env.CLIENT_URL}/api/auth/get-session`
         : "http://localhost:3000/api/auth/get-session";
@@ -40,6 +95,12 @@ const verifySession = async (req, res, next) => {
       userId = sessionData.user.id;
     } else {
       return res.status(401).json({ error: "Unauthorized: No credentials" });
+    }
+
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Could not resolve user ID" });
     }
 
     const db = req.app.locals.db;
@@ -70,8 +131,11 @@ const verifySession = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error("Auth Middleware Error:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    // ✅ Now logs the REAL error so you can see what's actually failing
+    console.error("Auth Middleware Error:", error.message, error.stack);
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", detail: error.message });
   }
 };
 

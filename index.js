@@ -407,6 +407,24 @@ app.get("/", (req, res) => res.send("Skillswap Server Running"));
 // ✅ Required for Vercel
 // module.exports = app;
 
+// ⚠️ TEMPORARY — remove after debugging
+app.get("/api/debug/token", async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.json({ error: "No auth header" });
+
+  const token = authHeader.split(" ")[1];
+  const decoded = jwt.decode(token);
+
+  try {
+    jwt.verify(token, process.env.BETTER_AUTH_SECRET, {
+      algorithms: ["HS256", "RS256", "ES256"],
+    });
+    res.json({ decoded, verified: true });
+  } catch (e) {
+    res.json({ decoded, verified: false, error: e.message });
+  }
+});
+
 async function startServer() {
   try {
     // Connect to MongoDB FIRST
