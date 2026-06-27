@@ -12,7 +12,7 @@ app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"], // ✅ this is what's missing
+    allowedHeaders: ["Content-Type", "Authorization"], 
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
