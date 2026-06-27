@@ -12,7 +12,7 @@ app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"], 
+    allowedHeaders: ["Content-Type", "Authorization"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
@@ -143,6 +143,7 @@ app.get("/api/tasks/:id", async (req, res) => {
   res.send(result);
 });
 
+// verifySession,
 app.put("/api/tasks/:id", verifySession, async (req, res) => {
   const { tasksCollection } = cols();
   const result = await tasksCollection.updateOne(
@@ -152,6 +153,7 @@ app.put("/api/tasks/:id", verifySession, async (req, res) => {
   res.send(result);
 });
 
+// verifySession,
 app.delete("/api/tasks/:id", verifySession, async (req, res) => {
   const { tasksCollection } = cols();
   const result = await tasksCollection.deleteOne({
@@ -179,6 +181,7 @@ app.post(
   },
 );
 
+// verifySession,
 app.get("/api/proposals", verifySession, async (req, res) => {
   const { proposalsCollection } = cols();
   const { taskId, freelancerEmail } = req.query;
@@ -189,6 +192,7 @@ app.get("/api/proposals", verifySession, async (req, res) => {
   res.send(result);
 });
 
+// verifySession,
 app.put("/api/proposals/:id", verifySession, async (req, res) => {
   const { proposalsCollection } = cols();
   const result = await proposalsCollection.updateOne(
@@ -308,6 +312,7 @@ app.get("/api/users/:email", async (req, res) => {
   res.send(result);
 });
 
+// verifySession,
 app.put("/api/users/:email", verifySession, async (req, res) => {
   const { usersCollection } = cols();
   const result = await usersCollection.updateOne(
@@ -332,7 +337,7 @@ app.put(
 );
 
 // --- PAYMENTS API ---
-
+// verifySession,
 app.get("/api/payments", verifySession, async (req, res) => {
   const { paymentsCollection } = cols();
   const query = {};
