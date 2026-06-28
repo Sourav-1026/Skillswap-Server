@@ -5,9 +5,7 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { verifySession, requireRole } = require("./authMiddleware");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const jwt = require("jsonwebtoken");
 
-// ✅ Add allowedHeaders
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
@@ -29,32 +27,8 @@ const client = new MongoClient(uri, {
   },
 });
 
-// ✅ Connection handler
 let db;
-// async function connectDB() {
-//   if (!db || !client.topology || !client.topology.isConnected()) {
-//     // Force a fresh client if topology is dead
-//     await client.close().catch(() => {});
-//     await client.connect();
-//     db = client.db("skillswap_db");
-//     app.locals.db = db;
-//     console.log("Connected to MongoDB");
-//   }
-//   return db;
-// }
 
-// // ✅ Reconnects on every request if needed
-// app.use(async (req, res, next) => {
-//   try {
-//     await connectDB();
-//     next();
-//   } catch (err) {
-//     console.error("MongoDB connection error:", err);
-//     res.status(500).json({ error: "Database connection failed" });
-//   }
-// });
-
-// ✅ Helper — always gets fresh collection references
 const cols = () => ({
   tasksCollection: db.collection("tasks"),
   proposalsCollection: db.collection("proposals"),
@@ -116,7 +90,6 @@ app.get("/api/tasks", async (req, res) => {
   });
 });
 
-// ⚠️ Must be before /api/tasks/:id
 app.get(
   "/api/tasks/freelancer/:email",
   verifySession,
@@ -143,7 +116,6 @@ app.get("/api/tasks/:id", async (req, res) => {
   res.send(result);
 });
 
-// verifySession,
 app.put("/api/tasks/:id", verifySession, async (req, res) => {
   const { tasksCollection } = cols();
   const result = await tasksCollection.updateOne(
@@ -153,7 +125,6 @@ app.put("/api/tasks/:id", verifySession, async (req, res) => {
   res.send(result);
 });
 
-// verifySession,
 app.delete("/api/tasks/:id", verifySession, async (req, res) => {
   const { tasksCollection } = cols();
   const result = await tasksCollection.deleteOne({
@@ -181,7 +152,6 @@ app.post(
   },
 );
 
-// verifySession,
 app.get("/api/proposals", verifySession, async (req, res) => {
   const { proposalsCollection } = cols();
   const { taskId, freelancerEmail } = req.query;
@@ -192,7 +162,6 @@ app.get("/api/proposals", verifySession, async (req, res) => {
   res.send(result);
 });
 
-// verifySession,
 app.put("/api/proposals/:id", verifySession, async (req, res) => {
   const { proposalsCollection } = cols();
   const result = await proposalsCollection.updateOne(
@@ -312,7 +281,6 @@ app.get("/api/users/:email", async (req, res) => {
   res.send(result);
 });
 
-// verifySession,
 app.put("/api/users/:email", verifySession, async (req, res) => {
   const { usersCollection } = cols();
   const result = await usersCollection.updateOne(
@@ -337,7 +305,7 @@ app.put(
 );
 
 // --- PAYMENTS API ---
-// verifySession,
+
 app.get("/api/payments", verifySession, async (req, res) => {
   const { paymentsCollection } = cols();
   const query = {};
@@ -405,49 +373,15 @@ app.get(
 
 app.get("/", (req, res) => res.send("Skillswap Server Running"));
 
-// ✅ Only listen locally
-// if (process.env.NODE_ENV !== "production") {
-// const port = process.env.PORT || 5000;
-// app.listen(port, () => console.log(`Server running on port ${port}`));
-// // }
-
-// process.on("unhandledRejection", (err) => {
-//   console.error("Unhandled error:", err);
-// });
-// ✅ Required for Vercel
-// module.exports = app;
-
-// ⚠️ TEMPORARY — remove after debugging
-app.get("/api/debug/token", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.json({ error: "No auth header" });
-
-  const token = authHeader.split(" ")[1];
-  const decoded = jwt.decode(token);
-
-  try {
-    jwt.verify(token, process.env.BETTER_AUTH_SECRET, {
-      algorithms: ["HS256", "RS256", "ES256"],
-    });
-    res.json({ decoded, verified: true });
-  } catch (e) {
-    res.json({ decoded, verified: false, error: e.message });
-  }
-});
-
 async function startServer() {
   try {
-    // Connect to MongoDB FIRST
     await client.connect();
     db = client.db("skillswap_db");
     app.locals.db = db;
     console.log("Connected to MongoDB");
 
-    // THEN start the server
     const port = process.env.PORT || 5000;
-    app.listen(port, () => {
-      console.log(`Server running on port ${port}`);
-    });
+    app.listen(port, () => console.log(`Server running on port ${port}`));
   } catch (err) {
     console.error("Startup failed:", err);
     process.exit(1);
